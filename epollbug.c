@@ -1,9 +1,9 @@
-<<<<<<< Updated upstream
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 
 /* FreeBSD should #include <netinet/in.h> */
@@ -19,30 +19,44 @@
 #define PORT_NUM (8080)
 #define BACKLOG 600
 
-struct sock_var {
-	int sk;
-} __attribute__ ((aligned (64))); /* one cacheline */
-
-struct sock_var socks[MAX_SOCK_NUM];
-
 struct worker_info {
   int efd; // epoll instance
 };
 
-struct worker_info workers[NUM_WORKERS]
+void startWakeupThread(void);
+void acceptLoop(void);
+void startWorkers(void);
 
-void acceptLoop( )
+int evfd = -1;
+struct worker_info workers[NUM_WORKERS];
+
+int main(void) {
+
+  startWorkers();
+  startWakeupThread();
+  acceptLoop();
+
+  return 0;
+}
+
+void startWorkers(void) {
+  return;
+}
+
+void acceptLoop(void)
 {
 	int sd;
 	struct sockaddr_in addr;
 	int alen = sizeof(addr);
 	short port = PORT_NUM;
 	int sock_tmp;
+	int current_worker = 0; 
+	struct epoll_event event;
 
         sd = socket(PF_INET, SOCK_STREAM, 0); 
         if (sd == -1) {
                 printf("socket: error: %d\n",errno);
-                return -1; 
+		exit(-1);
         }   
 
         addr.sin_family = AF_INET;
@@ -54,45 +68,37 @@ void acceptLoop( )
 
         if (bind(sd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
                 printf("bind error: %d\n",errno);
-                return -1; 
+		exit(-1);
         }   
 
         if (listen(sd, BACKLOG) == -1) {
 
                 printf("listen error: %d\n",errno);
-                return -1; 
+		exit(-1);
         }   
 
 	while(1) {
-		sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
-		if (sock_tmp == -1) {
-			printf("Error %d doing accept", errno);
-			return -1;
-		}
-		int flags = fcntl(sock_tmp, F_GETFL, 0);
-		if (flags < 0)
-			perror("Getting NONBLOCKING failed.\n");
-		if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 )
-			perror("Setting NONBLOCKING failed.\n");
+	  sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
+	  if (sock_tmp == -1) {
+	    printf("Error %d doing accept", errno);
+	    exit(-1);
+	  }
+	  int flags = fcntl(sock_tmp, F_GETFL, 0);
+	  if (flags < 0)
+	    perror("Getting NONBLOCKING failed.\n");
+	  if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 )
+	    perror("Setting NONBLOCKING failed.\n");
+
+	  event.data.fd = sock_tmp;
+	  event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+	  epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
+
+	  current_worker++;
 	}
 
 }
 
-
-
-
-int main(void) {
-
-  startWorkers();
-  startWakeupThread();
-  acceptLoop();
-
-  return 0;
-}
-
-
-int evfd = -1;
-startWakeupThread() {
+void startWakeupThread(void) {
 
   int epfd;
   struct epoll_event event;
@@ -109,7 +115,7 @@ startWakeupThread() {
   events = calloc (1, sizeof event);
   event.data.fd = evfd;
   event.events = EPOLLIN;
-  if (epoll_ctl (efd, EPOLL_CTL_ADD, evfd, &event) == -1) {
+  if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event) == -1) {
     perror("epoll_ctl");
     exit(-1);
   }
