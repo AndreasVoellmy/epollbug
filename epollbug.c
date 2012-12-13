@@ -253,6 +253,7 @@ void * wakeupThreadLoop(void * null) {
   struct epoll_event event;
   struct epoll_event *events;
   int n;
+  uint64_t val;
 
   evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
   if (evfd == -1) {
@@ -270,6 +271,12 @@ void * wakeupThreadLoop(void * null) {
   }
   while(1) {
     n = epoll_wait(epfd, events, 1, -1);
+    if (n>0) {
+      if (eventfd_read(evfd, &val) == -1) {
+	perror("eventfd_read");
+	exit(-1);
+      }
+    }
   }
   return NULL;
 }
