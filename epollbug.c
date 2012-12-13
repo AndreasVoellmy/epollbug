@@ -23,7 +23,7 @@ struct worker_info {
   int efd; // epoll instance
 };
 
-void startWakeupThread(void);
+void * startWakeupThread(void *);
 void acceptLoop(void);
 void startWorkers(void);
 
@@ -32,9 +32,25 @@ struct worker_info workers[NUM_WORKERS];
 
 int main(void) {
 
+  int res;
+  void *thread_pointer;
+
   startWorkers();
-  startWakeupThread();
+
+  pthread_t wait_thread;
+  res = pthread_create(&wait_thread, NULL, startWakeupThread, NULL);
+  if (res != 0) {
+    perror("Thread creat failed.");
+    return -1;
+  }
+
   acceptLoop();
+
+  res = pthread_join(wait_thread, &thread_pointer);
+  if (res != 0) {
+	  perror("Thread join failure.\n");
+	  return -1;
+  }
 
   return 0;
 }
@@ -98,7 +114,8 @@ void acceptLoop(void)
 
 }
 
-void startWakeupThread(void) {
+
+void * startWakeupThread(void * null) {
 
   int epfd;
   struct epoll_event event;
@@ -119,9 +136,9 @@ void startWakeupThread(void) {
     perror("epoll_ctl");
     exit(-1);
   }
-
   while(1) {
     n = epoll_wait(epfd, events, 1, -1);
   }
-
+  return NULL;
 }
+
