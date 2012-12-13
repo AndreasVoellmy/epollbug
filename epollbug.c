@@ -5,8 +5,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
-
-/* FreeBSD should #include <netinet/in.h> */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -16,11 +14,11 @@
 #include <sys/epoll.h>
 
 // constants
-#define NUM_WORKERS 20
+#define NUM_WORKERS 16
 #define PORT_NUM (8080)
 #define BACKLOG 600
 #define MAX_EVENTS 500
-#define EXPECTED_RECV_LEN 90
+#define NUM_CLIENTS 500
 
 // data types
 struct worker_info {
@@ -34,19 +32,52 @@ void acceptLoop(void);
 void startWorkers(void);
 void startWorkerThread(int);
 void *workerLoop(void *);
+void startSocketCheckThread(void);
 
 // global variables
 int evfd = -1;
 struct worker_info workers[NUM_WORKERS];
+int sockets[NUM_CLIENTS];
 
+// Fill this in with the http request that your
+// weighttp client sends to the server. This is the 
+// request that I get.
+char EXPECTED_HTTP_REQUEST[] = 
+  "GET / HTTP/1.1\r\nHost: 10.12.0.1:8080\r\n"
+  "User-Agent: weighttp/0.3\r\nConnection: keep-alive\r\n\r\n";
+
+int EXPECTED_RECV_LEN;
 
 int main(void) {
+  EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
   startWorkers();
   startWakeupThread();
+  startSocketCheckThread();
   acceptLoop();
   return 0;
 }
 
+void *socketCheck(void * arg) {
+  int i, m;
+  char recvbuf[1000];
+
+  sleep(10);
+  for (i = 0; i < NUM_CLIENTS; i++) {
+    m = recv(sockets[i], recvbuf, EXPECTED_RECV_LEN, 0);
+    if (m > 0) {
+      printf("socket %d has %d bytes of data ready\n", sockets[i], m);
+    }
+  }
+}
+
+void startSocketCheckThread(void) {
+  pthread_t thread;
+  if (pthread_create(&thread, NULL, socketCheck, (void *)NULL)) {
+    perror("pthread_create");
+    exit(-1);
+  }
+  return; 
+}
 
 void startWorkers(void) {
   int i;
@@ -145,57 +176,58 @@ void *workerLoop(void * arg) {
 
 void acceptLoop(void)
 {
-	int sd;
-	struct sockaddr_in addr;
-	int alen = sizeof(addr);
-	short port = PORT_NUM;
-	int sock_tmp;
-	int current_worker = 0; 
-	struct epoll_event event;
-
-        sd = socket(PF_INET, SOCK_STREAM, 0); 
-        if (sd == -1) {
-                printf("socket: error: %d\n",errno);
-		exit(-1);
-        }   
-
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port = htons(port);
-
-        int optval = 1;
-        setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
-
-        if (bind(sd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-                printf("bind error: %d\n",errno);
-		exit(-1);
-        }   
-
-        if (listen(sd, BACKLOG) == -1) {
-
-                printf("listen error: %d\n",errno);
-		exit(-1);
-        }   
-
-	while(1) {
-	  sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
-	  if (sock_tmp == -1) {
-	    printf("Error %d doing accept", errno);
-	    exit(-1);
-	  }
-	  int flags = fcntl(sock_tmp, F_GETFL, 0);
-	  if (flags < 0)
-	    perror("Getting NONBLOCKING failed.\n");
-	  if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 )
-	    perror("Setting NONBLOCKING failed.\n");
-
-	  event.data.fd = sock_tmp;
-	  event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-	  epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
-
-	  current_worker = (current_worker + 1) % NUM_WORKERS;
-	}
-
+  int sd;
+  struct sockaddr_in addr;
+  int alen = sizeof(addr);
+  short port = PORT_NUM;
+  int sock_tmp;
+  int current_worker = 0; 
+  struct epoll_event event;
+  int current_client = 0;
+  
+  sd = socket(PF_INET, SOCK_STREAM, 0); 
+  if (sd == -1) {
+    printf("socket: error: %d\n",errno);
+    exit(-1);
+  }   
+  
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = INADDR_ANY;
+  addr.sin_port = htons(port);
+  
+  int optval = 1;
+  setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
+  
+  if (bind(sd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+    printf("bind error: %d\n",errno);
+    exit(-1);
+  }   
+  
+  if (listen(sd, BACKLOG) == -1) {
+    printf("listen error: %d\n",errno);
+    exit(-1);
+  }   
+  
+  while(1) {
+    sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
+    if (sock_tmp == -1) {
+      printf("Error %d doing accept", errno);
+      exit(-1);
+    }
+    sockets[current_client] = sock_tmp;
+    current_client++;
+    int flags = (sock_tmp, F_GETFL, 0);
+    if (flags < 0)
+      perror("Getting NONBLOCKING failed.\n");
+    if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 )
+      perror("Setting NONBLOCKING failed.\n");
+    
+    event.data.fd = sock_tmp;
+    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+    epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
+    
+    current_worker = (current_worker + 1) % NUM_WORKERS;
+  }
 }
 
 void startWakeupThread(void) {
