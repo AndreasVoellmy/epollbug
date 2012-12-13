@@ -1,3 +1,4 @@
 epollbug
 ========
-this is a test edit. 
+compile with:
+gcc -O epollbug.c -lpthread

@@ -23,9 +23,11 @@ struct worker_info {
   int efd; // epoll instance
 };
 
-void * startWakeupThread(void *);
+void startWakeupThread(void);
+void * wakeupThreadLoop(void *);
 void acceptLoop(void);
 void startWorkers(void);
+void startWorkerThread(int);
 
 int evfd = -1;
 struct worker_info workers[NUM_WORKERS];
@@ -36,26 +38,41 @@ int main(void) {
   void *thread_pointer;
 
   startWorkers();
-
-  pthread_t wait_thread;
-  res = pthread_create(&wait_thread, NULL, startWakeupThread, NULL);
-  if (res != 0) {
-    perror("Thread creat failed.");
-    return -1;
-  }
-
+  startWakeupThread();
   acceptLoop();
-
-  res = pthread_join(wait_thread, &thread_pointer);
-  if (res != 0) {
-	  perror("Thread join failure.\n");
-	  return -1;
-  }
 
   return 0;
 }
 
 void startWorkers(void) {
+  int i;
+  int efd;
+  for (i=0; i < NUM_WORKERS; i++) {
+    efd = epoll_create1(0);
+    if (efd==-1) {
+      perror("worker epoll_create1");
+      exit(-1);
+    }
+    workers[i].efd = efd;
+  }
+
+  for (i=0; i < NUM_WORKERS; i++) {
+    startWorkerThread(i);
+  }
+}
+
+void *workerLoop(void * arg) {
+  int w = (int) arg;
+  printf("hello from worker %d\n", w);
+  pthread_exit(NULL);
+}
+
+void startWorkerThread(int w) {
+  pthread_t thread;
+  if (pthread_create(&thread, NULL, workerLoop, (void *) w)) {
+    perror("pthread_create");
+    exit(-1);
+  }
   return;
 }
 
@@ -114,8 +131,15 @@ void acceptLoop(void)
 
 }
 
+void startWakeupThread(void) {
+  pthread_t wait_thread;
+  if (pthread_create(&wait_thread, NULL, wakeupThreadLoop, NULL) != 0) {
+    perror("Thread creat failed.");
+    exit(-1);
+  }
+}
 
-void * startWakeupThread(void * null) {
+void * wakeupThreadLoop(void * null) {
 
   int epfd;
   struct epoll_event event;
@@ -128,7 +152,7 @@ void * startWakeupThread(void * null) {
     exit(-1);
   }
 
-  epfd = epoll_create1(1);
+  epfd = epoll_create1(0);
   events = calloc (1, sizeof event);
   event.data.fd = evfd;
   event.events = EPOLLIN;
