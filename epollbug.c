@@ -15,34 +15,38 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 
+// constants
 #define NUM_WORKERS 20
 #define PORT_NUM (8080)
 #define BACKLOG 600
+#define MAX_EVENTS 500
+#define EXPECTED_RECV_LEN 90
 
+// data types
 struct worker_info {
   int efd; // epoll instance
 };
 
+// prototypes
 void startWakeupThread(void);
 void * wakeupThreadLoop(void *);
 void acceptLoop(void);
 void startWorkers(void);
 void startWorkerThread(int);
+void *workerLoop(void *);
 
+// global variables
 int evfd = -1;
 struct worker_info workers[NUM_WORKERS];
 
+
 int main(void) {
-
-  int res;
-  void *thread_pointer;
-
   startWorkers();
   startWakeupThread();
   acceptLoop();
-
   return 0;
 }
+
 
 void startWorkers(void) {
   int i;
@@ -61,12 +65,6 @@ void startWorkers(void) {
   }
 }
 
-void *workerLoop(void * arg) {
-  int w = (int)(unsigned long) arg;
-  printf("hello from worker %d\n", w);
-  pthread_exit(NULL);
-}
-
 void startWorkerThread(int w) {
   pthread_t thread;
   if (pthread_create(&thread, NULL, workerLoop, (void *)(unsigned long) w)) {
@@ -74,6 +72,75 @@ void startWorkerThread(int w) {
     exit(-1);
   }
   return;
+}
+
+void *workerLoop(void * arg) {
+  int w = (int)(unsigned long) arg;
+  int epfd = workers[w].efd;
+  int n; 
+  int i;
+  int sock;
+  struct epoll_event *events;
+  struct epoll_event event;
+  char recvbuf[1000];
+  ssize_t m;
+  int numSent;
+  char response[] = "HTTP/1.1 200 OK\r\nDate: Tue, 09 Oct 2012 16:36:18 GMT\r\nContent-Length: 151\r\nServer: Mighttpd/2.8.1\r\nLast-Modified: Mon, 09 Jul 2012 03:42:33 GMT\r\nContent-Type: text/html\r\n\r\n<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n<body bgcolor=\"white\" text=\"black\">\n<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
+  size_t responseLength = strlen(response);
+
+  printf("hello from worker %d\n", w);
+
+  events = calloc (1, sizeof (struct epoll_event));
+
+  while(1) {
+
+    n = epoll_wait(epfd, events, MAX_EVENTS, -1);
+    for (i=0; i < n; i++) {
+      sock = events[i].data.fd; 
+
+      // receive bytes and send response.
+      // ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+      m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
+
+      if (m==0) {
+	continue;
+      }
+
+      if (m != EXPECTED_RECV_LEN) {
+	perror("partial recv");
+	exit(-1);
+      }
+
+      //ssize_t send(int sockfd, const void *buf, size_t len, int flags);
+      numSent = send(sock, response, responseLength, 0);
+      if (numSent == -1) {
+	perror("send failed");
+	exit(-1);
+      }
+      if (numSent != responseLength) {
+	perror("partial send");
+	exit(-1);
+      }
+
+      //int eventfd_write(int fd, eventfd_t value);
+      if (eventfd_write(evfd, 1) == -1) {
+	perror("eventfd_write");
+	exit(-1);
+      }
+
+
+      // re-arm the socket with epoll.
+      event.data.fd = sock;
+      event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+      if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event) == -1) {
+	perror("rearm epoll_ctl"); 
+	exit(-1);
+      }
+    }
+
+  }
+
+  pthread_exit(NULL);
 }
 
 void acceptLoop(void)
@@ -126,7 +193,7 @@ void acceptLoop(void)
 	  event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 	  epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
 
-	  current_worker++;
+	  current_worker = (current_worker + 1) % NUM_WORKERS;
 	}
 
 }
@@ -134,7 +201,7 @@ void acceptLoop(void)
 void startWakeupThread(void) {
   pthread_t wait_thread;
   if (pthread_create(&wait_thread, NULL, wakeupThreadLoop, NULL) != 0) {
-    perror("Thread creat failed.");
+    perror("Thread create failed.");
     exit(-1);
   }
 }
