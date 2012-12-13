@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -10,7 +11,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
-
+#include <sys/eventfd.h>
+#include <stdint.h>
+#include <sys/epoll.h>
 
 #define NUM_WORKERS 20
 #define PORT_NUM (8080)
@@ -21,7 +24,6 @@ struct sock_var {
 } __attribute__ ((aligned (64))); /* one cacheline */
 
 struct sock_var socks[MAX_SOCK_NUM];
-
 
 struct worker_info {
   int efd; // epoll instance
@@ -86,4 +88,34 @@ int main(void) {
   acceptLoop();
 
   return 0;
+}
+
+
+int evfd = -1;
+startWakeupThread() {
+
+  int epfd;
+  struct epoll_event event;
+  struct epoll_event *events;
+  int n;
+
+  evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+  if (evfd == -1) {
+    perror("eventfd failed");
+    exit(-1);
+  }
+
+  epfd = epoll_create1(1);
+  events = calloc (1, sizeof event);
+  event.data.fd = evfd;
+  event.events = EPOLLIN;
+  if (epoll_ctl (efd, EPOLL_CTL_ADD, evfd, &event) == -1) {
+    perror("epoll_ctl");
+    exit(-1);
+  }
+
+  while(1) {
+    n = epoll_wait(epfd, events, 1, -1);
+  }
+
 }
