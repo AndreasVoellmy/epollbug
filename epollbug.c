@@ -62,14 +62,14 @@ void startWorkers(void) {
 }
 
 void *workerLoop(void * arg) {
-  int w = (int) arg;
+  int w = (int)(unsigned long) arg;
   printf("hello from worker %d\n", w);
   pthread_exit(NULL);
 }
 
 void startWorkerThread(int w) {
   pthread_t thread;
-  if (pthread_create(&thread, NULL, workerLoop, (void *) w)) {
+  if (pthread_create(&thread, NULL, workerLoop, (void *)(unsigned long) w)) {
     perror("pthread_create");
     exit(-1);
   }
