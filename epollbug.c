@@ -19,6 +19,7 @@
 #define BACKLOG 600
 #define MAX_EVENTS 500
 #define NUM_CLIENTS 500
+// #define SHOW_REQUEST 
 
 // data types
 struct worker_info {
@@ -27,7 +28,7 @@ struct worker_info {
 
 // prototypes
 void startWakeupThread(void);
-void * wakeupThreadLoop(void *);
+void *wakeupThreadLoop(void *);
 void acceptLoop(void);
 void startWorkers(void);
 void startWorkerThread(int);
@@ -128,8 +129,6 @@ void *workerLoop(void * arg) {
     "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
   size_t responseLength = strlen(response);
 
-  printf("hello from worker %d\n", w);
-
   events = calloc (1, sizeof (struct epoll_event));
 
   while(1) {
@@ -140,7 +139,16 @@ void *workerLoop(void * arg) {
 
       // receive bytes and send response.
       // ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+
+#ifdef SHOW_REQUEST
+      m = recv(sock, recvbuf, 200, 0);
+      recvbuf[m]='\0';
+      printf("http request: %s\n", recvbuf);
+      exit(0);
+#else
       m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
+#endif
+
 
       if (m==0) {
 	continue;
@@ -163,7 +171,7 @@ void *workerLoop(void * arg) {
       }
 
       //int eventfd_write(int fd, eventfd_t value);
-      if (eventfd_write(evfd, 1) == -1) {
+      if (eventfd_write(evfd, 1)) {
 	perror("eventfd_write");
 	exit(-1);
       }
@@ -172,7 +180,7 @@ void *workerLoop(void * arg) {
       // re-arm the socket with epoll.
       event.data.fd = sock;
       event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-      if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event) == -1) {
+      if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event)) {
 	perror("rearm epoll_ctl"); 
 	exit(-1);
       }
@@ -207,12 +215,12 @@ void acceptLoop(void)
   int optval = 1;
   setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
   
-  if (bind(sd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+  if (bind(sd, (struct sockaddr*)&addr, sizeof(addr))) {
     printf("bind error: %d\n",errno);
     exit(-1);
   }   
   
-  if (listen(sd, BACKLOG) == -1) {
+  if (listen(sd, BACKLOG)) {
     printf("listen error: %d\n",errno);
     exit(-1);
   }   
@@ -265,14 +273,14 @@ void * wakeupThreadLoop(void * null) {
   events = calloc (1, sizeof event);
   event.data.fd = evfd;
   event.events = EPOLLIN;
-  if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event) == -1) {
+  if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event)) {
     perror("epoll_ctl");
     exit(-1);
   }
   while(1) {
     n = epoll_wait(epfd, events, 1, -1);
     if (n>0) {
-      if (eventfd_read(evfd, &val) == -1) {
+      if (eventfd_read(evfd, &val)) {
 	perror("eventfd_read");
 	exit(-1);
       }
