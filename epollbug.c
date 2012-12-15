@@ -27,7 +27,8 @@ void startWorkerThread(int);
 void *workerLoop(void *);
 void startSocketCheckThread(void);
 int receiveLoop(int, int, char []);
-void setNonBlocking(int fd);
+void setNonBlocking(int);
+void *socketCheck(void *);
 
 // constants
 #define NUM_WORKERS 16
