@@ -50,7 +50,7 @@ char EXPECTED_HTTP_REQUEST[] =
 
 int EXPECTED_RECV_LEN;
 
-char response[] = 
+char RESPONSE[] = 
   "HTTP/1.1 200 OK\r\n"
   "Date: Tue, 09 Oct 2012 16:36:18 GMT\r\n"
   "Content-Length: 151\r\n"
@@ -61,8 +61,11 @@ char response[] =
   "<body bgcolor=\"white\" text=\"black\">\n"
   "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
 
+size_t RESPONSE_LEN;
+
 int main(void) {
   EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
+  RESPONSE_LEN = strlen(RESPONSE);
   startWorkers();
   startWakeupThread();
   startSocketCheckThread();
@@ -150,7 +153,6 @@ void *workerLoop(void * arg) {
 int receiveLoop(int sock, int epfd, char recvbuf[]) {
   ssize_t m;
   int numSent;
-  size_t responseLength = strlen(response);
   struct epoll_event event;
 
   while(1) {
@@ -158,12 +160,12 @@ int receiveLoop(int sock, int epfd, char recvbuf[]) {
     if (m==0) break;
     if (m > 0) {
       if (m == EXPECTED_RECV_LEN) {
-	numSent = send(sock, response, responseLength, 0);
+	numSent = send(sock, RESPONSE, RESPONSE_LEN, 0);
 	if (numSent == -1) {
 	  perror("send failed");
 	  exit(-1);
 	}
-	if (numSent != responseLength) {
+	if (numSent != RESPONSE_LEN) {
 	  perror("partial send");
 	  exit(-1);
 	}
@@ -199,13 +201,14 @@ void acceptLoop(void)
 {
   int sd;
   struct sockaddr_in addr;
+  struct epoll_event event;
   int alen = sizeof(addr);
   short port = PORT_NUM;
   int sock_tmp;
   int current_worker = 0; 
-  struct epoll_event event;
   int current_client = 0;
-  
+  int optval, flags;
+
   sd = socket(PF_INET, SOCK_STREAM, 0); 
   if (sd == -1) {
     printf("socket: error: %d\n",errno);
@@ -216,19 +219,16 @@ void acceptLoop(void)
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(port);
   
-  int optval = 1;
+  optval = 1;
   setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
-  
   if (bind(sd, (struct sockaddr*)&addr, sizeof(addr))) {
     printf("bind error: %d\n",errno);
     exit(-1);
   }   
-  
   if (listen(sd, BACKLOG)) {
     printf("listen error: %d\n",errno);
     exit(-1);
   }   
-  
   while(1) {
     sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
     if (sock_tmp == -1) {
@@ -236,17 +236,19 @@ void acceptLoop(void)
       exit(-1);
     }
     sockets[current_client] = sock_tmp;
-    current_client++;
-    int flags = (sock_tmp, F_GETFL, 0);
-    if (flags < 0)
+    flags = fcntl(sock_tmp, F_GETFL, 0);
+    if (flags < 0) {
       perror("Getting NONBLOCKING failed.\n");
-    if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 )
+      exit(-1);
+    }
+    if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 ) {
       perror("Setting NONBLOCKING failed.\n");
-    
+      exit(-1);
+    }
     event.data.fd = sock_tmp;
     event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
-    
+    current_client++;    
     current_worker = (current_worker + 1) % NUM_WORKERS;
   }
 }
