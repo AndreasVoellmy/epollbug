@@ -72,28 +72,6 @@ int main(void) {
   return 0;
 }
 
-// Sleep for 10 seconds, then show the sockets which have data.
-void *socketCheck(void * arg) {
-  int i, m;
-  char recvbuf[1000];
-  sleep(10);
-  for (i = 0; i < NUM_CLIENTS; i++) {
-    m = recv(sockets[i], recvbuf, EXPECTED_RECV_LEN, 0);
-    if (m > 0) {
-      printf("socket %d has %d bytes of data ready\n", sockets[i], m);
-    }
-  }
-}
-
-void startSocketCheckThread(void) {
-  pthread_t thread;
-  if (pthread_create(&thread, NULL, socketCheck, (void *)NULL)) {
-    perror("pthread_create");
-    exit(-1);
-  }
-  return; 
-}
-
 void startWorkers(void) {
   int i;
   int efd;
@@ -193,6 +171,69 @@ int receiveLoop(int sock, int epfd, char recvbuf[]) {
   }
 }
 
+void startWakeupThread(void) {
+  pthread_t wait_thread;
+  if (pthread_create(&wait_thread, NULL, wakeupThreadLoop, NULL) != 0) {
+    perror("Thread create failed.");
+    exit(-1);
+  }
+}
+
+void * wakeupThreadLoop(void * null) {
+
+  int epfd;
+  struct epoll_event event;
+  struct epoll_event *events;
+  int n;
+  uint64_t val;
+
+  evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+  if (evfd == -1) {
+    perror("eventfd failed");
+    exit(-1);
+  }
+
+  epfd = epoll_create1(0);
+  events = calloc (1, sizeof event);
+  event.data.fd = evfd;
+  event.events = EPOLLIN;
+  if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event)) {
+    perror("epoll_ctl");
+    exit(-1);
+  }
+  while(1) {
+    n = epoll_wait(epfd, events, 1, -1);
+    if (n>0) {
+      if (eventfd_read(evfd, &val)) {
+	perror("eventfd_read");
+	exit(-1);
+      }
+    }
+  }
+  return NULL;
+}
+
+// Sleep for 10 seconds, then show the sockets which have data.
+void startSocketCheckThread(void) {
+  pthread_t thread;
+  if (pthread_create(&thread, NULL, socketCheck, (void *)NULL)) {
+    perror("pthread_create");
+    exit(-1);
+  }
+  return; 
+}
+
+void *socketCheck(void * arg) {
+  int i, m;
+  char recvbuf[1000];
+  sleep(10);
+  for (i = 0; i < NUM_CLIENTS; i++) {
+    m = recv(sockets[i], recvbuf, EXPECTED_RECV_LEN, 0);
+    if (m > 0) {
+      printf("socket %d has %d bytes of data ready\n", sockets[i], m);
+    }
+  }
+}
 
 void acceptLoop(void)
 {
@@ -252,46 +293,3 @@ void setNonBlocking(int fd) {
   }
   return;
 }
-
-void startWakeupThread(void) {
-  pthread_t wait_thread;
-  if (pthread_create(&wait_thread, NULL, wakeupThreadLoop, NULL) != 0) {
-    perror("Thread create failed.");
-    exit(-1);
-  }
-}
-
-void * wakeupThreadLoop(void * null) {
-
-  int epfd;
-  struct epoll_event event;
-  struct epoll_event *events;
-  int n;
-  uint64_t val;
-
-  evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-  if (evfd == -1) {
-    perror("eventfd failed");
-    exit(-1);
-  }
-
-  epfd = epoll_create1(0);
-  events = calloc (1, sizeof event);
-  event.data.fd = evfd;
-  event.events = EPOLLIN;
-  if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event)) {
-    perror("epoll_ctl");
-    exit(-1);
-  }
-  while(1) {
-    n = epoll_wait(epfd, events, 1, -1);
-    if (n>0) {
-      if (eventfd_read(evfd, &val)) {
-	perror("eventfd_read");
-	exit(-1);
-      }
-    }
-  }
-  return NULL;
-}
-
