@@ -132,64 +132,61 @@ void *workerLoop(void * arg) {
   events = calloc (1, sizeof (struct epoll_event));
 
   while(1) {
-
     n = epoll_wait(epfd, events, MAX_EVENTS, -1);
     for (i=0; i < n; i++) {
       sock = events[i].data.fd; 
-
-      // receive bytes and send response.
-      // ssize_t recv(int sockfd, void *buf, size_t len, int flags);
-
 #ifdef SHOW_REQUEST
       m = recv(sock, recvbuf, 200, 0);
       recvbuf[m]='\0';
       printf("http request: %s\n", recvbuf);
       exit(0);
-#else
-      m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
 #endif
-
-
-      if (m==0) {
-	continue;
-      }
-
-      if (m != EXPECTED_RECV_LEN) {
-	perror("partial recv");
-	exit(-1);
-      }
-
-      //ssize_t send(int sockfd, const void *buf, size_t len, int flags);
-      numSent = send(sock, response, responseLength, 0);
-      if (numSent == -1) {
-	perror("send failed");
-	exit(-1);
-      }
-      if (numSent != responseLength) {
-	perror("partial send");
-	exit(-1);
-      }
-
-      //int eventfd_write(int fd, eventfd_t value);
-      if (eventfd_write(evfd, 1)) {
-	perror("eventfd_write");
-	exit(-1);
-      }
-
-
-      // re-arm the socket with epoll.
-      event.data.fd = sock;
-      event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-      if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event)) {
-	perror("rearm epoll_ctl"); 
-	exit(-1);
+      while(1) {
+	m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
+	if (m==0) break;
+	if (m > 0) {
+	  if (m == EXPECTED_RECV_LEN) {
+	    numSent = send(sock, response, responseLength, 0);
+	    if (numSent == -1) {
+	      perror("send failed");
+	      exit(-1);
+	    }
+	    if (numSent != responseLength) {
+	      perror("partial send");
+	      exit(-1);
+	    }
+	    if (eventfd_write(evfd, 1)) {
+	      perror("eventfd_write");
+	      exit(-1);
+	    }
+	  } else {
+	    perror("partial recv");
+	    exit(-1);
+	  }
+	}
+	if (m==-1) {
+	  if (errno==EAGAIN) {
+	    // re-arm the socket with epoll.
+	    event.data.fd = sock;
+	    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+	    if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event)) {
+	      perror("rearm epoll_ctl"); 
+	      exit(-1);
+	    }
+	    break;
+	  } else {
+	    perror("recv");
+	    exit(-1);
+	  }
+	}
       }
     }
-
   }
 
   pthread_exit(NULL);
 }
+
+
 
 void acceptLoop(void)
 {
