@@ -50,6 +50,17 @@ char EXPECTED_HTTP_REQUEST[] =
 
 int EXPECTED_RECV_LEN;
 
+char response[] = 
+  "HTTP/1.1 200 OK\r\n"
+  "Date: Tue, 09 Oct 2012 16:36:18 GMT\r\n"
+  "Content-Length: 151\r\n"
+  "Server: Mighttpd/2.8.1\r\n"
+  "Last-Modified: Mon, 09 Jul 2012 03:42:33 GMT\r\n"
+  "Content-Type: text/html\r\n\r\n"
+  "<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n"
+  "<body bgcolor=\"white\" text=\"black\">\n"
+  "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
+
 int main(void) {
   EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
   startWorkers();
@@ -139,16 +150,6 @@ void *workerLoop(void * arg) {
 int receiveLoop(int sock, int epfd, char recvbuf[]) {
   ssize_t m;
   int numSent;
-  char response[] = 
-    "HTTP/1.1 200 OK\r\n"
-    "Date: Tue, 09 Oct 2012 16:36:18 GMT\r\n"
-    "Content-Length: 151\r\n"
-    "Server: Mighttpd/2.8.1\r\n"
-    "Last-Modified: Mon, 09 Jul 2012 03:42:33 GMT\r\n"
-    "Content-Type: text/html\r\n\r\n"
-    "<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n"
-    "<body bgcolor=\"white\" text=\"black\">\n"
-    "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
   size_t responseLength = strlen(response);
   struct epoll_event event;
 
