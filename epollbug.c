@@ -13,14 +13,6 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 
-// constants
-#define NUM_WORKERS 16
-#define PORT_NUM (8080)
-#define BACKLOG 600
-#define MAX_EVENTS 500
-#define NUM_CLIENTS 500
-// #define SHOW_REQUEST 
-
 // data types
 struct worker_info {
   int efd; // epoll instance
@@ -35,11 +27,15 @@ void startWorkerThread(int);
 void *workerLoop(void *);
 void startSocketCheckThread(void);
 int receiveLoop(int, int, char []);
+void setNonBlocking(int fd);
 
-// global variables
-int evfd = -1;
-struct worker_info workers[NUM_WORKERS];
-int sockets[NUM_CLIENTS];
+// constants
+#define NUM_WORKERS 16
+#define PORT_NUM (8080)
+#define BACKLOG 600
+#define MAX_EVENTS 500
+#define NUM_CLIENTS 500
+// #define SHOW_REQUEST 
 
 // Fill this in with the http request that your
 // weighttp client sends to the server. This is the 
@@ -47,7 +43,6 @@ int sockets[NUM_CLIENTS];
 char EXPECTED_HTTP_REQUEST[] = 
   "GET / HTTP/1.1\r\nHost: 10.12.0.1:8080\r\n"
   "User-Agent: weighttp/0.3\r\nConnection: keep-alive\r\n\r\n";
-
 int EXPECTED_RECV_LEN;
 
 char RESPONSE[] = 
@@ -60,8 +55,12 @@ char RESPONSE[] =
   "<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n"
   "<body bgcolor=\"white\" text=\"black\">\n"
   "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
-
 size_t RESPONSE_LEN;
+
+// global variables
+int evfd = -1;
+struct worker_info workers[NUM_WORKERS];
+int sockets[NUM_CLIENTS];
 
 int main(void) {
   EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
@@ -73,10 +72,10 @@ int main(void) {
   return 0;
 }
 
+// Sleep for 10 seconds, then show the sockets which have data.
 void *socketCheck(void * arg) {
   int i, m;
   char recvbuf[1000];
-
   sleep(10);
   for (i = 0; i < NUM_CLIENTS; i++) {
     m = recv(sockets[i], recvbuf, EXPECTED_RECV_LEN, 0);
@@ -99,8 +98,7 @@ void startWorkers(void) {
   int i;
   int efd;
   for (i=0; i < NUM_WORKERS; i++) {
-    efd = epoll_create1(0);
-    if (efd==-1) {
+    if (-1==(efd = epoll_create1(0))) {
       perror("worker epoll_create1");
       exit(-1);
     }
@@ -146,7 +144,6 @@ void *workerLoop(void * arg) {
       receiveLoop(sock, epfd, recvbuf);
     }
   }
-
   pthread_exit(NULL);
 }
 
@@ -209,8 +206,7 @@ void acceptLoop(void)
   int current_client = 0;
   int optval, flags;
 
-  sd = socket(PF_INET, SOCK_STREAM, 0); 
-  if (sd == -1) {
+  if (-1 == (sd = socket(PF_INET, SOCK_STREAM, 0))) {
     printf("socket: error: %d\n",errno);
     exit(-1);
   }   
@@ -230,27 +226,31 @@ void acceptLoop(void)
     exit(-1);
   }   
   while(1) {
-    sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen);
-    if (sock_tmp == -1) {
+    if (-1 == (sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen))) {
       printf("Error %d doing accept", errno);
       exit(-1);
     }
     sockets[current_client] = sock_tmp;
-    flags = fcntl(sock_tmp, F_GETFL, 0);
-    if (flags < 0) {
-      perror("Getting NONBLOCKING failed.\n");
-      exit(-1);
-    }
-    if ( fcntl(sock_tmp, F_SETFL, flags | O_NONBLOCK ) < 0 ) {
-      perror("Setting NONBLOCKING failed.\n");
-      exit(-1);
-    }
+    setNonBlocking(sock_tmp);
     event.data.fd = sock_tmp;
     event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
     current_client++;    
     current_worker = (current_worker + 1) % NUM_WORKERS;
   }
+}
+
+void setNonBlocking(int fd) {
+  int flags;
+  if (-1 == (flags = fcntl(fd, F_GETFL, 0))) {
+    perror("Getting NONBLOCKING failed.\n");
+    exit(-1);
+  }
+  if ( fcntl(fd, F_SETFL, flags | O_NONBLOCK ) < 0 ) {
+    perror("Setting NONBLOCKING failed.\n");
+    exit(-1);
+  }
+  return;
 }
 
 void startWakeupThread(void) {
