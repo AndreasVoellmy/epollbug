@@ -31,12 +31,15 @@ void setNonBlocking(int);
 void *socketCheck(void *);
 
 // constants
-#define NUM_WORKERS 16
+#define NUM_WORKERS 20
 #define PORT_NUM (8080)
 #define BACKLOG 600
 #define MAX_EVENTS 500
 #define NUM_CLIENTS 500
+
+// compilation flags
 // #define SHOW_REQUEST 
+// #define READ_EVENT_FD
 
 // Fill this in with the http request that your
 // weighttp client sends to the server. This is the 
@@ -202,6 +205,7 @@ void * wakeupThreadLoop(void * null) {
     perror("epoll_ctl");
     exit(-1);
   }
+#ifdef READ_EVENT_FD
   while(1) {
     n = epoll_wait(epfd, events, 1, -1);
     if (n>0) {
@@ -211,6 +215,9 @@ void * wakeupThreadLoop(void * null) {
       }
     }
   }
+#elseif
+  sleep(20); 
+#endif
   return NULL;
 }
 
