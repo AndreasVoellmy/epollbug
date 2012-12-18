@@ -196,16 +196,16 @@ void * wakeupThreadLoop(void * null) {
     perror("eventfd failed");
     exit(-1);
   }
-
+#ifdef READ_EVENT_FD
   epfd = epoll_create1(0);
   events = calloc (1, sizeof event);
   event.data.fd = evfd;
   event.events = EPOLLIN;
+
   if (epoll_ctl (epfd, EPOLL_CTL_ADD, evfd, &event)) {
     perror("epoll_ctl");
     exit(-1);
   }
-#ifdef READ_EVENT_FD
   while(1) {
     n = epoll_wait(epfd, events, 1, -1);
     if (n>0) {
@@ -218,7 +218,7 @@ void * wakeupThreadLoop(void * null) {
 #elseif
   sleep(20); 
 #endif
-  return NULL;
+  return;
 }
 
 // Sleep for 10 seconds, then show the sockets which have data.
