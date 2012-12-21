@@ -1,4 +1,4 @@
 epollbug
 ========
 compile with:
-gcc -O epollbug.c -lpthread
+gcc -O2 epollbug.c -lpthread -Wall
