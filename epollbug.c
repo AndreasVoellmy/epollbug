@@ -240,7 +240,6 @@ void startSocketCheckThread(void) {
 void *socketCheck(void * arg) {
   int i, bytesAvailable; 
   sleep(10);
-  //  bytesAvailable = 0;
   for (i = 0; i < NUM_CLIENTS; i++) {
     if (ioctl(sockets[i], FIONREAD, &bytesAvailable) < 0) {
       perror("ioctl");
