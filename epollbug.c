@@ -1,9 +1,13 @@
+// compile with
+// gcc -O2 epollbug.c -lpthread -Wall
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -26,7 +30,7 @@ void startWorkers(void);
 void startWorkerThread(int);
 void *workerLoop(void *);
 void startSocketCheckThread(void);
-int receiveLoop(int, int, char []);
+void receiveLoop(int, int, char []);
 void setNonBlocking(int);
 void *socketCheck(void *);
 
@@ -37,9 +41,12 @@ void *socketCheck(void *);
 #define MAX_EVENTS 500
 #define NUM_CLIENTS 500
 
-// compilation flags
+// Define this and the program will print the request made 
+// by the http client and then exit.
 // #define SHOW_REQUEST 
-// #define READ_EVENT_FD
+
+// This makes the bug more likely to happen, but it can happen without this.
+#define READ_EVENT_FD
 
 // Fill this in with the http request that your
 // weighttp client sends to the server. This is the 
@@ -109,7 +116,6 @@ void *workerLoop(void * arg) {
   int sock;
   struct epoll_event *events;
   char recvbuf[1000];
-  ssize_t m;
 
   events = calloc (MAX_EVENTS, sizeof (struct epoll_event));
 
@@ -129,7 +135,7 @@ void *workerLoop(void * arg) {
   pthread_exit(NULL);
 }
 
-int receiveLoop(int sock, int epfd, char recvbuf[]) {
+void receiveLoop(int sock, int epfd, char recvbuf[]) {
   ssize_t m;
   int numSent;
   struct epoll_event event;
@@ -185,18 +191,18 @@ void startWakeupThread(void) {
 
 void * wakeupThreadLoop(void * null) {
 
-  int epfd;
-  struct epoll_event event;
-  struct epoll_event *events;
-  int n;
-  uint64_t val;
-
   evfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
   if (evfd == -1) {
     perror("eventfd failed");
     exit(-1);
   }
 #ifdef READ_EVENT_FD
+  int epfd;
+  struct epoll_event event;
+  struct epoll_event *events;
+  uint64_t val;
+  int n;
+
   epfd = epoll_create1(0);
   events = calloc (1, sizeof event);
   event.data.fd = evfd;
@@ -215,10 +221,10 @@ void * wakeupThreadLoop(void * null) {
       }
     }
   }
-#elseif
+#else
   sleep(20); 
 #endif
-  return;
+  pthread_exit(NULL);
 }
 
 // Sleep for 10 seconds, then show the sockets which have data.
@@ -232,15 +238,19 @@ void startSocketCheckThread(void) {
 }
 
 void *socketCheck(void * arg) {
-  int i, m;
-  char recvbuf[1000];
+  int i, bytesAvailable; 
   sleep(10);
+  //  bytesAvailable = 0;
   for (i = 0; i < NUM_CLIENTS; i++) {
-    m = recv(sockets[i], recvbuf, EXPECTED_RECV_LEN, 0);
-    if (m > 0) {
-      printf("socket %d has %d bytes of data ready\n", sockets[i], m);
+    if (ioctl(sockets[i], FIONREAD, &bytesAvailable) < 0) {
+      perror("ioctl");
+      exit(-1);
+    }
+    if (bytesAvailable > 0) {
+      printf("socket %d has %d bytes of data ready\n", sockets[i], bytesAvailable);  
     }
   }
+  pthread_exit(NULL);
 }
 
 void acceptLoop(void)
@@ -248,12 +258,12 @@ void acceptLoop(void)
   int sd;
   struct sockaddr_in addr;
   struct epoll_event event;
-  int alen = sizeof(addr);
+  socklen_t alen = sizeof(addr);
   short port = PORT_NUM;
   int sock_tmp;
   int current_worker = 0; 
   int current_client = 0;
-  int optval, flags;
+  int optval;
 
   if (-1 == (sd = socket(PF_INET, SOCK_STREAM, 0))) {
     printf("socket: error: %d\n",errno);
