@@ -66,9 +66,9 @@ char RESPONSE[] =
   "Server: Mighttpd/2.8.1\r\n"
   "Last-Modified: Mon, 09 Jul 2012 03:42:33 GMT\r\n"
   "Content-Type: text/html\r\n\r\n"
-  "<html>\n<head>\n<title>Welcome to nginx!</title>\n</head>\n"
+  "<html>\n<head>\n<title>Welcome!</title>\n</head>\n"
   "<body bgcolor=\"white\" text=\"black\">\n"
-  "<center><h1>Welcome to nginx!</h1></center>\n</body>\n</html>\n";
+  "<center><h1>Welcome!</h1></center>\n</body>\n</html>\n";
 size_t RESPONSE_LEN;
 
 // global variables
