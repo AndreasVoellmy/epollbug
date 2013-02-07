@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdint.h>
 
@@ -116,13 +117,13 @@ void *workerLoop(void * arg) {
   int n;
   int i;
   int sock;
-  struct kevent64_s *events;
+  struct kevent *events;
   char recvbuf[1000];
 
-  events = calloc (MAX_EVENTS, sizeof (struct kevent64_s));
+  events = calloc (MAX_EVENTS, sizeof (struct kevent));
 
   while(1) {
-    n = kevent64(epfd,NULL,0,events,MAX_EVENTS,0,NULL);
+    n = kevent(epfd,NULL,0,events,MAX_EVENTS,NULL);
     for (i=0; i < n; i++) {
       sock = events[i].ident;
 #ifdef SHOW_REQUEST
@@ -141,7 +142,7 @@ void *workerLoop(void * arg) {
 void receiveLoop(int sock, int epfd, char recvbuf[]) {
   ssize_t m;
   int numSent;
-  struct kevent64_s event;
+  struct kevent event;
 
   while(1) {
     m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
@@ -168,7 +169,7 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
 	event.ident = sock;
 	event.filter = EVFILT_READ;
 	event.flags = EV_ADD | EV_ONESHOT;
-	if (kevent64(epfd, &event, 1, NULL, 0, 0, NULL)) {
+	if (kevent(epfd, &event, 1, NULL, 0, NULL)) {
 	  perror("rearm");
 	  exit(-1);
 	}
@@ -210,7 +211,7 @@ void acceptLoop(void)
 {
   int sd;
   struct sockaddr_in addr;
-  struct kevent64_s event;
+  struct kevent event;
   socklen_t alen = sizeof(addr);
   short port = PORT_NUM;
   int sock_tmp;
@@ -248,7 +249,7 @@ void acceptLoop(void)
     event.ident = sock_tmp;
     event.filter = EVFILT_READ ;
     event.flags = EV_ADD | EV_ONESHOT;
-    kevent64(workers[current_worker].efd, &event, 1, NULL, 0, 0, NULL);
+    kevent(workers[current_worker].efd, &event, 1, NULL, 0, NULL);
     current_client++;
     current_worker = (current_worker + 1) % NUM_WORKERS;
   }
