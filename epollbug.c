@@ -41,22 +41,22 @@ void *socketCheck(void *);
 #define MAX_EVENTS 500
 #define NUM_CLIENTS 500
 
-// Define this and the program will print the request made 
+// Define this and the program will print the request made
 // by the http client and then exit.
-// #define SHOW_REQUEST 
+// #define SHOW_REQUEST
 
 // This makes the bug more likely to happen, but it can happen without this.
 #define READ_EVENT_FD
 
 // Fill this in with the http request that your
-// weighttp client sends to the server. This is the 
+// weighttp client sends to the server. This is the
 // request that I get.
-char EXPECTED_HTTP_REQUEST[] = 
+char EXPECTED_HTTP_REQUEST[] =
   "GET / HTTP/1.1\r\nHost: 10.12.0.1:8080\r\n"
   "User-Agent: weighttp/0.3\r\nConnection: keep-alive\r\n\r\n";
 int EXPECTED_RECV_LEN;
 
-char RESPONSE[] = 
+char RESPONSE[] =
   "HTTP/1.1 200 OK\r\n"
   "Date: Tue, 09 Oct 2012 16:36:18 GMT\r\n"
   "Content-Length: 151\r\n"
@@ -111,7 +111,7 @@ void startWorkerThread(int w) {
 void *workerLoop(void * arg) {
   int w = (int)(unsigned long) arg;
   int epfd = workers[w].efd;
-  int n; 
+  int n;
   int i;
   int sock;
   struct epoll_event *events;
@@ -122,7 +122,7 @@ void *workerLoop(void * arg) {
   while(1) {
     n = epoll_wait(epfd, events, MAX_EVENTS, -1);
     for (i=0; i < n; i++) {
-      sock = events[i].data.fd; 
+      sock = events[i].data.fd;
 #ifdef SHOW_REQUEST
       m = recv(sock, recvbuf, 200, 0);
       recvbuf[m]='\0';
@@ -169,7 +169,7 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
 	event.data.fd = sock;
 	event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 	if (epoll_ctl(epfd, EPOLL_CTL_MOD, sock, &event)) {
-	  perror("rearm epoll_ctl"); 
+	  perror("rearm epoll_ctl");
 	  exit(-1);
 	}
 	break;
@@ -222,7 +222,7 @@ void * wakeupThreadLoop(void * null) {
     }
   }
 #else
-  sleep(20); 
+  sleep(20);
 #endif
   pthread_exit(NULL);
 }
@@ -234,11 +234,11 @@ void startSocketCheckThread(void) {
     perror("pthread_create");
     exit(-1);
   }
-  return; 
+  return;
 }
 
 void *socketCheck(void * arg) {
-  int i, bytesAvailable; 
+  int i, bytesAvailable;
   sleep(10);
   for (i = 0; i < NUM_CLIENTS; i++) {
     if (ioctl(sockets[i], FIONREAD, &bytesAvailable) < 0) {
@@ -246,7 +246,7 @@ void *socketCheck(void * arg) {
       exit(-1);
     }
     if (bytesAvailable > 0) {
-      printf("socket %d has %d bytes of data ready\n", sockets[i], bytesAvailable);  
+      printf("socket %d has %d bytes of data ready\n", sockets[i], bytesAvailable);
     }
   }
   pthread_exit(NULL);
@@ -260,29 +260,29 @@ void acceptLoop(void)
   socklen_t alen = sizeof(addr);
   short port = PORT_NUM;
   int sock_tmp;
-  int current_worker = 0; 
+  int current_worker = 0;
   int current_client = 0;
   int optval;
 
   if (-1 == (sd = socket(PF_INET, SOCK_STREAM, 0))) {
     printf("socket: error: %d\n",errno);
     exit(-1);
-  }   
-  
+  }
+
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(port);
-  
+
   optval = 1;
   setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval);
   if (bind(sd, (struct sockaddr*)&addr, sizeof(addr))) {
     printf("bind error: %d\n",errno);
     exit(-1);
-  }   
+  }
   if (listen(sd, BACKLOG)) {
     printf("listen error: %d\n",errno);
     exit(-1);
-  }   
+  }
   while(1) {
     if (-1 == (sock_tmp = accept(sd, (struct sockaddr*)&addr, &alen))) {
       printf("Error %d doing accept", errno);
@@ -293,7 +293,7 @@ void acceptLoop(void)
     event.data.fd = sock_tmp;
     event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
-    current_client++;    
+    current_client++;
     current_worker = (current_worker + 1) % NUM_WORKERS;
   }
 }
