@@ -56,7 +56,7 @@ char RESPONSE[] =
   "HTTP/1.1 200 OK\r\n"
   "Date: Tue, 09 Oct 2012 16:36:18 GMT\r\n"
   "Content-Length: 145\r\n"
-  "Server: Mighttpd/2.8.1\r\n"
+  "Server: Fake\r\n"
   "Last-Modified: Mon, 09 Jul 2012 03:42:33 GMT\r\n"
   "Content-Type: text/html\r\n\r\n"
   "<html>\n<head>\n<title>Welcome to foo</title>\n</head>\n"
