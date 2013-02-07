@@ -1,7 +1,8 @@
 // (1) First make sure you update the EXPECTED_HTTP_REQUEST variable as instructed below.
 // (2) Set NUM_WORKERS to the number of cores you have (or maybe more if you want?)
-// (3) Compile with: gcc -O2 kqueueserver2.c -lpthread -Wall -o kqueueserver2
-// (4) To run: ./kqueueserver2
+// (3) Set NUM_CLIENTS to be the argument given to -c of weighttp.
+// (4) Compile with: gcc -O2 kqueueserver2.c -lpthread -Wall -o kqueueserver2
+// (5) To run: ./kqueueserver2
 
 
 #include <stdio.h>
