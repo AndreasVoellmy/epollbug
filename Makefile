@@ -3,4 +3,4 @@ all:
 #	gcc -O2 kqueueserver.c -lpthread -Wall -o kqueueserver
 
 clean:
-	rm kqueueserver kqueueserver2
+	rm -f kqueueserver kqueueserver2
