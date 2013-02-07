@@ -16,7 +16,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdint.h>
 #include <sys/event.h>
@@ -102,11 +101,11 @@ void *workerLoop(void * arg) {
   int n;
   int i;
   int sock;
-  struct kevent *events;
+  struct kevent64_s *events;
   char recvbuf[1000];
   int j;
 
-  events = calloc (MAX_EVENTS, sizeof (struct kevent));
+  events = calloc (MAX_EVENTS, sizeof (struct kevent64_s));
 
   if (-1==(epfd = kqueue())) {
     perror("worker kqueue");
@@ -115,16 +114,16 @@ void *workerLoop(void * arg) {
 
   for (j=0; j<NUM_CLIENTS; j++) {
     if (socketAssignments[j] == w) {
-      struct kevent event;
+      struct kevent64_s event;
       event.ident =  sockets[j];
       event.filter = EVFILT_READ ;
       event.flags = EV_ADD | EV_ONESHOT;
-      kevent(epfd, &event, 1, NULL, 0, NULL);
+      kevent64(epfd, &event, 1, NULL, 0, 0, NULL);
     }
   }
 
   while(1) {
-    n = kevent(epfd,NULL,0,events,MAX_EVENTS,NULL);
+    n = kevent64(epfd,NULL,0,events,MAX_EVENTS,0,NULL);
     for (i=0; i < n; i++) {
       sock = events[i].ident;
 #ifdef SHOW_REQUEST
@@ -153,7 +152,7 @@ incSocketRequestCount(int sock) {
 void receiveLoop(int sock, int epfd, int w, char recvbuf[]) {
   ssize_t m;
   int numSent;
-  struct kevent event;
+  struct kevent64_s event;
 
   while(1) {
     m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
@@ -181,7 +180,7 @@ void receiveLoop(int sock, int epfd, int w, char recvbuf[]) {
 	  event.ident = sock;
 	  event.filter = EVFILT_READ;
 	  event.flags = EV_ADD | EV_ONESHOT;
-	  if (kevent(epfd, &event, 1, NULL, 0, NULL)) {
+	  if (kevent64(epfd, &event, 1, NULL, 0, 0, NULL)) {
 	    perror("rearm");
 	    exit(-1);
 	  }
