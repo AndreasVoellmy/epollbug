@@ -115,10 +115,11 @@ void *workerLoop(void * arg) {
   for (j=0; j<NUM_CLIENTS; j++) {
     if (socketAssignments[j] == w) {
       struct kevent64_s event;
-      event.ident =  sockets[j];
-      event.filter = EVFILT_READ ;
-      event.flags = EV_ADD | EV_ONESHOT;
-      kevent64(epfd, &event, 1, NULL, 0, 0, NULL);
+
+      EV_SET64(&event, sockets[j], EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, 0, 0, 0);
+      if (kevent64(epfd, &event, 1, NULL, 0, 0, NULL)!=0) {
+	perror("initial registration");
+      }
     }
   }
 
@@ -177,14 +178,12 @@ void receiveLoop(int sock, int epfd, int w, char recvbuf[]) {
       if (m==-1) {
 	if (errno==EAGAIN) {
 	  // re-arm the socket with epoll.
-	  event.ident = sock;
-	  event.filter = EVFILT_READ;
-	  event.flags = EV_ADD | EV_ONESHOT;
-	  if (kevent64(epfd, &event, 1, NULL, 0, 0, NULL)) {
+	  EV_SET64(&event, sock, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, 0, 0, 0);
+	  if (kevent64(epfd, &event, 1, NULL, 0, 0, NULL)!=0) {
 	    perror("rearm");
 	    exit(-1);
 	  }
-	  printf("rearmed %d on %d\n", sock, w);
+	  // printf("rearmed %d on %d\n", sock, w);
 	  break;
 	} else {
 	  perror("recv");
