@@ -25,8 +25,8 @@ struct worker_info {
 // prototypes
 void startWakeupThread(void);
 void *wakeupThreadLoop(void *);
-void acceptLoop(void);
-void startWorkers(void);
+void acceptLoop(int);
+void startWorkers(int);
 void startWorkerThread(int);
 void *workerLoop(void *);
 void startSocketCheckThread(void);
@@ -35,7 +35,7 @@ void setNonBlocking(int);
 void *socketCheck(void *);
 
 // constants
-#define NUM_WORKERS 20
+#define MAX_NUM_WORKERS 60
 #define PORT_NUM (8080)
 #define BACKLOG 600
 #define MAX_EVENTS 500
@@ -46,7 +46,7 @@ void *socketCheck(void *);
 // #define SHOW_REQUEST
 
 // This makes the bug more likely to happen, but it can happen without this.
-#define READ_EVENT_FD
+// #define READ_EVENT_FD
 
 // Fill this in with the http request that your
 // weighttp client sends to the server. This is the
@@ -70,23 +70,34 @@ size_t RESPONSE_LEN;
 
 // global variables
 int evfd = -1;
-struct worker_info workers[NUM_WORKERS];
+struct worker_info workers[MAX_NUM_WORKERS];
 int sockets[NUM_CLIENTS];
 
-int main(void) {
+int main(int argc, char *argv[]) {
   EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
   RESPONSE_LEN = strlen(RESPONSE);
-  startWorkers();
+  
+  if (argc != 2) {
+    printf( "usage: %s #workers\n", argv[0] );
+    return -1;
+  }
+  int numWorkers = atoi(argv[1]);
+  if (numWorkers >= MAX_NUM_WORKERS) {
+    printf("error: number of workers must be less than %d\n", MAX_NUM_WORKERS);
+    return -1;
+  }
+
+  startWorkers(numWorkers);
   startWakeupThread();
   startSocketCheckThread();
-  acceptLoop();
+  acceptLoop(numWorkers);
   return 0;
 }
 
-void startWorkers(void) {
+void startWorkers(int numWorkers) {
   int i;
   int efd;
-  for (i=0; i < NUM_WORKERS; i++) {
+  for (i=0; i < numWorkers; i++) {
     if (-1==(efd = epoll_create1(0))) {
       perror("worker epoll_create1");
       exit(-1);
@@ -94,7 +105,7 @@ void startWorkers(void) {
     workers[i].efd = efd;
   }
 
-  for (i=0; i < NUM_WORKERS; i++) {
+  for (i=0; i < numWorkers; i++) {
     startWorkerThread(i);
   }
 }
@@ -252,7 +263,7 @@ void *socketCheck(void * arg) {
   pthread_exit(NULL);
 }
 
-void acceptLoop(void)
+void acceptLoop(int numWorkers)
 {
   int sd;
   struct sockaddr_in addr;
@@ -294,7 +305,7 @@ void acceptLoop(void)
     event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     epoll_ctl(workers[current_worker].efd, EPOLL_CTL_ADD, sock_tmp, &event);
     current_client++;
-    current_worker = (current_worker + 1) % NUM_WORKERS;
+    current_worker = (current_worker + 1) % numWorkers;
   }
 }
 
