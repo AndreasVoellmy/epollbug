@@ -48,6 +48,14 @@ void *socketCheck(void *);
 // This makes the bug more likely to happen, but it can happen without this.
 // #define READ_EVENT_FD
 
+// This removes all features for debugging, and converts this program to an 
+// simple, yet fast C-based HTTP server.
+#define SHOW_PEAK_PERFORMANCE
+#ifdef SHOW_PEAK_PERFORMANCE
+  #undef READ_EVENT_FD
+  #undef SHOW_REQUEST
+#endif
+
 // Fill this in with the http request that your
 // weighttp client sends to the server. This is the
 // request that I get.
@@ -69,7 +77,11 @@ char RESPONSE[] =
 size_t RESPONSE_LEN;
 
 // global variables
+
+#if !(defined SHOW_PEAK_PERFORMANCE)
 int evfd = -1;
+#endif
+
 struct worker_info workers[MAX_NUM_WORKERS];
 int sockets[NUM_CLIENTS];
 
@@ -88,8 +100,10 @@ int main(int argc, char *argv[]) {
   }
 
   startWorkers(numWorkers);
+#if !(defined SHOW_PEAK_PERFORMANCE)
   startWakeupThread();
   startSocketCheckThread();
+#endif
   acceptLoop(numWorkers);
   return 0;
 }
@@ -165,10 +179,12 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
 	  perror("partial send");
 	  exit(-1);
 	}
+#if !(defined SHOW_PEAK_PERFORMANCE)
 	if (eventfd_write(evfd, 1)) {
 	  perror("eventfd_write");
 	  exit(-1);
 	}
+#endif
       } else {
 	perror("partial recv");
 	exit(-1);
@@ -192,6 +208,7 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
   }
 }
 
+#if !(defined SHOW_PEAK_PERFORMANCE)
 void startWakeupThread(void) {
   pthread_t wait_thread;
   if (pthread_create(&wait_thread, NULL, wakeupThreadLoop, NULL) != 0) {
@@ -237,7 +254,9 @@ void * wakeupThreadLoop(void * null) {
 #endif
   pthread_exit(NULL);
 }
+#endif
 
+#if !(defined SHOW_PEAK_PERFORMANCE)
 // Sleep for 10 seconds, then show the sockets which have data.
 void startSocketCheckThread(void) {
   pthread_t thread;
@@ -262,6 +281,7 @@ void *socketCheck(void * arg) {
   }
   pthread_exit(NULL);
 }
+#endif
 
 void acceptLoop(int numWorkers)
 {
