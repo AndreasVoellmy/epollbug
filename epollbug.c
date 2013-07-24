@@ -35,11 +35,11 @@ void setNonBlocking(int);
 void *socketCheck(void *);
 
 // constants
-#define MAX_NUM_WORKERS 60
+#define MAX_NUM_WORKERS 120
 #define PORT_NUM (8080)
 #define BACKLOG 600
 #define MAX_EVENTS 500
-#define NUM_CLIENTS 500
+#define NUM_CLIENTS 1000
 
 // Define this and the program will print the request made
 // by the http client and then exit.
@@ -88,6 +88,8 @@ int sockets[NUM_CLIENTS];
 int main(int argc, char *argv[]) {
   EXPECTED_RECV_LEN = strlen(EXPECTED_HTTP_REQUEST);
   RESPONSE_LEN = strlen(RESPONSE);
+
+  printf("Length of requst: %d;  response: %d\n", EXPECTED_RECV_LEN, RESPONSE_LEN);
   
   if (argc != 2) {
     printf( "usage: %s #workers\n", argv[0] );
@@ -164,12 +166,15 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
   ssize_t m;
   int numSent;
   struct epoll_event event;
+  int remaining = EXPECTED_RECV_LEN;
 
   while(1) {
-    m = recv(sock, recvbuf, EXPECTED_RECV_LEN, 0);
+    m = recv(sock, recvbuf, remaining, 0);
     if (m==0) break;
     if (m > 0) {
-      if (m == EXPECTED_RECV_LEN) {
+      remaining = remaining - m;
+      if (remaining == 0) {
+	remaining = EXPECTED_RECV_LEN;
 	numSent = send(sock, RESPONSE, RESPONSE_LEN, 0);
 	if (numSent == -1) {
 	  perror("send failed");
@@ -185,10 +190,13 @@ void receiveLoop(int sock, int epfd, char recvbuf[]) {
 	  exit(-1);
 	}
 #endif
-      } else {
-	perror("partial recv");
-	exit(-1);
-      }
+      } //else {
+	//      if (remaining < 0) {
+	//	perror("remaining < 0");
+	//      }
+	//perror("partial recv");
+	//exit(-1);
+        //}
     }
     if (m==-1) {
       if (errno==EAGAIN) {
